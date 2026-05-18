@@ -1,0 +1,3 @@
+{% include "partials/article_card.html" %}
+<span id="badge-unread-total" hx-swap-oob="outerHTML">{% if total_unread %}<span class="sidebar-badge">{{ total_unread }}</span>{% endif %}</span>
+<span id="badge-feed-{{ article.feed_id }}" hx-swap-oob="outerHTML">{% if feed_unread %}<span class="sidebar-badge">{{ feed_unread }}</span>{% endif %}</span>

@@ -1,0 +1,30 @@
+{% if articles %}
+  {% if articles | selectattr("is_read", "equalto", false) | list %}
+  <div class="list-toolbar">
+    <button
+      class="btn-small"
+      hx-patch="/articles/read-all{% if active_feed_id %}?feed_id={{ active_feed_id }}{% elif show_unread %}?unread=1{% elif show_favourites %}?favourites=1{% endif %}"
+      hx-disabled-elt="this"
+    >
+      Mark all as read
+    </button>
+  </div>
+  {% endif %}
+  {% for article in articles[:page_size] %}
+    {% include "partials/article_card.html" %}
+  {% endfor %}
+  {% if articles | length > page_size %}
+  <div class="load-more-sentinel"
+       hx-get="/articles/more?offset={{ page_size }}{% if active_feed_id %}&feed_id={{ active_feed_id }}{% endif %}{% if show_unread %}&unread=1{% endif %}{% if show_favourites %}&favourites=1{% endif %}"
+       hx-trigger="revealed"
+       hx-target="this"
+       hx-swap="outerHTML">
+    <p class="load-more-label">Loading more…</p>
+  </div>
+  {% endif %}
+{% else %}
+<div class="empty-state">
+  <p>No articles yet.</p>
+  <a href="/feeds">Add a feed</a> to get started.
+</div>
+{% endif %}

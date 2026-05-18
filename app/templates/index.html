@@ -1,0 +1,63 @@
+{% extends "base.html" %} {% block title %}S-RSS Reader{% endblock %} {% block
+sidebar %}
+<aside class="sidebar">
+  <h3 class="sidebar-heading">Feeds</h3>
+  <ul class="feed-nav">
+    <li>
+      <a
+        href="/"
+        hx-get="/articles"
+        hx-target="#articles"
+        hx-push-url="/"
+        {% if not active_feed_id and not show_favourites and not show_unread %}class="active"{% endif %}
+      >
+        <span class="feed-nav-label">All articles</span>
+      </a>
+    </li>
+    <li>
+      <a
+        href="/?unread=1"
+        hx-get="/articles?unread=1"
+        hx-target="#articles"
+        hx-push-url="/?unread=1"
+        {% if show_unread %}class="active"{% endif %}
+      >
+        <span class="feed-nav-label">Unread</span>
+        <span id="badge-unread-total">{% if total_unread %}<span class="sidebar-badge">{{ total_unread }}</span>{% endif %}</span>
+      </a>
+    </li>
+    <li>
+      <a
+        href="/?favourites=1"
+        hx-get="/articles?favourites=1"
+        hx-target="#articles"
+        hx-push-url="/?favourites=1"
+        {% if show_favourites %}class="active"{% endif %}
+      >
+        <span class="feed-nav-label">Favourites</span>
+      </a>
+    </li>
+    {% for feed in feeds %}
+    <li>
+      <a
+        href="/?feed_id={{ feed.id }}"
+        hx-get="/articles?feed_id={{ feed.id }}"
+        hx-target="#articles"
+        hx-push-url="/?feed_id={{ feed.id }}"
+        {% if active_feed_id == feed.id %}class="active"{% endif %}
+      >
+        {% if feed.favicon_url %}
+        <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'" />
+        {% endif %}
+        <span class="feed-nav-label">{{ feed.title or feed.url }}</span>
+        {% set count = unread_counts.get(feed.id, 0) %}
+        <span id="badge-feed-{{ feed.id }}">{% if count %}<span class="sidebar-badge">{{ count }}</span>{% endif %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  <a class="btn-small" href="/feeds">+ Add feed</a>
+</aside>
+{% endblock %} {% block content %}
+<div id="articles">{% include "partials/article_list.html" %}</div>
+{% endblock %}

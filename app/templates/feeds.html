@@ -1,0 +1,24 @@
+{% extends "base.html" %} {% block title %}Manage Feeds — S-RSS Reader{%
+endblock %} {% block content %}
+<div class="feeds-page">
+  <h2>Manage Feeds</h2>
+
+  <form
+    class="add-feed-form"
+    hx-post="/feeds"
+    hx-target="#feed-list"
+    hx-swap="outerHTML"
+    hx-on::after-request="this.reset()"
+  >
+    <input
+      type="url"
+      name="url"
+      placeholder="https://example.com/feed.xml"
+      required
+    />
+    <button type="submit">Add Feed</button>
+  </form>
+
+  <div id="feed-list">{% include "partials/feed_list.html" %}</div>
+</div>
+{% endblock %}

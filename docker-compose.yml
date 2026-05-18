@@ -1,0 +1,12 @@
+services:
+  rss-reader:
+    build: .
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DB_PATH=/data/rss.db
+      - FETCH_INTERVAL_MIN=30
+      - MAX_ARTICLES_PER_FEED=200
+    restart: unless-stopped

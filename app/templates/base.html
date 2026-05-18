@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}S-RSS Reader{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js" defer></script>
+  <script src="/static/shortcuts.js" defer></script>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/">S-RSS Reader</a>
+    <div class="nav-links">
+      <a href="/" {% if request.url.path == "/" and not request.query_params.get("favourites") %}class="active"{% endif %}>All</a>
+      <a href="/?favourites=1" {% if request.query_params.get("favourites") %}class="active"{% endif %}>Favourites</a>
+      <a href="/feeds" {% if request.url.path == "/feeds" %}class="active"{% endif %}>Manage Feeds</a>
+      <a href="/settings" {% if request.url.path == "/settings" %}class="active"{% endif %}>Settings</a>
+    </div>
+  </nav>
+
+  <div class="layout">
+    {% block sidebar %}{% endblock %}
+    <main class="main-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

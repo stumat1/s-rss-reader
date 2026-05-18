@@ -1,0 +1,51 @@
+<article class="article-card {% if article.is_read %}article-card--read{% else %}article-card--unread{% endif %}" id="article-{{ article.id }}">
+  <div class="article-meta">
+    {% if not article.is_read %}<span class="unread-dot" title="Unread"></span>{% endif %}
+    {% if article.feed.favicon_url %}
+    <img class="favicon" src="{{ article.feed.favicon_url }}" alt="" onerror="this.style.display='none'">
+    {% endif %}
+    <span class="feed-name">{{ article.feed.title or article.feed.url }}</span>
+    {% if article.published_at %}
+    <time datetime="{{ article.published_at.isoformat() }}">
+      {{ article.published_at.strftime("%b %d, %Y") }}
+    </time>
+    {% endif %}
+  </div>
+
+  <h2 class="article-title">
+    {% if article.link %}
+    <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer">{{ article.title or "(no title)" }}</a>
+    {% else %}
+    {{ article.title or "(no title)" }}
+    {% endif %}
+  </h2>
+
+  {% if article.summary %}
+  <div class="article-summary">{{ article.summary | safe }}</div>
+  {% endif %}
+
+  <div class="article-actions">
+    <button class="btn-icon {% if article.is_favourite %}active{% endif %}"
+            title="{% if article.is_favourite %}Remove from favourites{% else %}Add to favourites{% endif %}"
+            hx-patch="/articles/{{ article.id }}/favourite"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="outerHTML">
+      {% if article.is_favourite %}★{% else %}☆{% endif %}
+    </button>
+    <button class="btn-icon {% if article.is_read %}btn-read{% endif %}"
+            title="{% if article.is_read %}Mark as unread{% else %}Mark as read{% endif %}"
+            hx-patch="/articles/{{ article.id }}/read"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="outerHTML">
+      {% if article.is_read %}○{% else %}●{% endif %}
+    </button>
+    <button class="btn-icon btn-danger"
+            title="Delete article"
+            hx-delete="/articles/{{ article.id }}"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="delete"
+            hx-confirm="Remove this article?">
+      ✕
+    </button>
+  </div>
+</article>

@@ -1,0 +1,147 @@
+{% extends "base.html" %} {% block title %}Settings — S-RSS Reader{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="settings-section">
+  <h2>Appearance</h2>
+  <div class="settings-row">
+    <h3>Color Theme</h3>
+    <p>Choose a color theme for the reader.</p>
+    <div class="theme-grid">
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="dark">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#1a1a1a;"></div>
+          <div class="theme-swatch-body" style="background:#2d2d2d;"></div>
+        </div>
+        <span class="theme-name">Dark</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="light">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#e0e0e0;"></div>
+          <div class="theme-swatch-body" style="background:#f5f5f5;"></div>
+        </div>
+        <span class="theme-name">Light</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="peach">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#c97c5d;"></div>
+          <div class="theme-swatch-body" style="background:#fde8d8;"></div>
+        </div>
+        <span class="theme-name">Peach</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="pink">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#c2185b;"></div>
+          <div class="theme-swatch-body" style="background:#fce4ec;"></div>
+        </div>
+        <span class="theme-name">Pink</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="yellow">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#f9a825;"></div>
+          <div class="theme-swatch-body" style="background:#fffde7;"></div>
+        </div>
+        <span class="theme-name">Yellow</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="light-blue">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#0288d1;"></div>
+          <div class="theme-swatch-body" style="background:#e1f5fe;"></div>
+        </div>
+        <span class="theme-name">Light Blue</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="dark-blue">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#0d1b4b;"></div>
+          <div class="theme-swatch-body" style="background:#1a2a6c;"></div>
+        </div>
+        <span class="theme-name">Dark Blue</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="purple">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#6a1b9a;"></div>
+          <div class="theme-swatch-body" style="background:#f3e5f5;"></div>
+        </div>
+        <span class="theme-name">Purple</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="green">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#2e7d32;"></div>
+          <div class="theme-swatch-body" style="background:#e8f5e9;"></div>
+        </div>
+        <span class="theme-name">Green</span>
+      </label>
+
+      <label class="theme-option">
+        <input type="radio" name="theme" value="red">
+        <div class="theme-preview">
+          <div class="theme-swatch-nav" style="background:#b71c1c;"></div>
+          <div class="theme-swatch-body" style="background:#ffebee;"></div>
+        </div>
+        <span class="theme-name">Red</span>
+      </label>
+
+    </div>
+  </div>
+</section>
+
+<section class="settings-section">
+  <h2>Import / Export</h2>
+
+  <div class="settings-row">
+    <h3>Export</h3>
+    <p>
+      Download all your subscribed feeds as an OPML file, compatible with any
+      RSS reader.
+    </p>
+    <a href="/settings/export" class="btn-small">Download feeds.opml</a>
+  </div>
+
+  <div class="settings-row">
+    <h3>Import</h3>
+    <p>
+      Upload an OPML file to bulk-import feeds. Duplicates are skipped
+      automatically.
+    </p>
+    <form
+      hx-post="/settings/import"
+      hx-encoding="multipart/form-data"
+      hx-target="#import-result"
+      hx-swap="innerHTML"
+    >
+      <div class="import-form-row">
+        <input type="file" name="file" accept=".opml,.xml" required />
+        <button type="submit">Import</button>
+      </div>
+    </form>
+    <div id="import-result"></div>
+  </div>
+</section>
+<script>
+  document.querySelectorAll('input[name="theme"]').forEach(function(r){
+    if(r.value===(localStorage.getItem('theme')||'dark')) r.checked=true;
+    r.addEventListener('change',function(){
+      document.documentElement.setAttribute('data-theme',this.value);
+      localStorage.setItem('theme',this.value);
+    });
+  });
+</script>
+{% endblock %}

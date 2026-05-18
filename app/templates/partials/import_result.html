@@ -1,0 +1,9 @@
+{% if error %}
+<p class="import-result import-result--error">{{ error }}</p>
+{% else %}
+<p class="import-result import-result--ok">
+  Imported {{ imported }} feed{{ "s" if imported != 1 else "" }}. {% if skipped
+  %} {{ skipped }} already existed and {{ "were" if skipped != 1 else "was" }}
+  skipped.{% endif %}
+</p>
+{% endif %}

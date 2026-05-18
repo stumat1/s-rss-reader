@@ -1,0 +1,62 @@
+<div id="feed-list">
+  {% if error %}
+  <p class="error-msg">{{ error }}</p>
+  {% endif %}
+
+  {% if feeds %}
+  <table class="feed-table">
+    <thead>
+      <tr>
+        <th>Feed</th>
+        <th>Last fetched</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for feed in feeds %}
+      <tr>
+        <td>
+          {% if feed.favicon_url %}
+          <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'">
+          {% endif %}
+          <span>{{ feed.title or feed.url }}</span>
+          <small class="feed-url">{{ feed.url }}</small>
+        </td>
+        <td>
+          {% if feed.last_fetched_at %}
+          {{ feed.last_fetched_at.strftime("%b %d %H:%M") }}
+          {% else %}
+          —
+          {% endif %}
+        </td>
+        <td>
+          {% if feed.error %}
+          <span class="badge badge-error" title="{{ feed.error }}">Error</span>
+          {% else %}
+          <span class="badge badge-ok">OK</span>
+          {% endif %}
+        </td>
+        <td class="feed-actions">
+          <button class="btn-small"
+                  hx-post="/feeds/{{ feed.id }}/refresh"
+                  hx-target="#feed-list"
+                  hx-swap="outerHTML">
+            Refresh
+          </button>
+          <button class="btn-small btn-danger"
+                  hx-delete="/feeds/{{ feed.id }}"
+                  hx-target="#feed-list"
+                  hx-swap="outerHTML"
+                  hx-confirm="Delete '{{ feed.title or feed.url }}' and all its articles?">
+            Delete
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No feeds added yet.</p>
+  {% endif %}
+</div>
