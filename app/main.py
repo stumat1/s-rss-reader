@@ -14,9 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
-from app.fetcher import fetch_feed, schedule_feed, start_scheduler, unschedule_feed, _assert_public_url
-from app.models import Article, Feed
+from app.database import Base, SessionLocal, engine, get_db
+from app.fetcher import fetch_feed, get_max_articles, schedule_feed, set_max_articles, start_scheduler, unschedule_feed, _assert_public_url
+from app.models import Article, Feed, Setting
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
                 conn.commit()
             except Exception:
                 pass  # column already exists
+    with SessionLocal() as db:
+        s = db.get(Setting, "max_articles_per_feed")
+        if s:
+            set_max_articles(int(s.value))
     start_scheduler()
     yield
     _import_executor.shutdown(wait=False)
@@ -288,7 +292,30 @@ def delete_article(
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return templates.TemplateResponse(
+        "settings.html",
+        {"request": request, "max_articles": get_max_articles()},
+    )
+
+
+@app.post("/settings/max-articles", response_class=HTMLResponse)
+def save_max_articles(
+    request: Request,
+    max_articles_per_feed: int = Form(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    val = max(1, min(10000, max_articles_per_feed))
+    setting = db.get(Setting, "max_articles_per_feed")
+    if setting:
+        setting.value = str(val)
+    else:
+        db.add(Setting(key="max_articles_per_feed", value=str(val)))
+    db.commit()
+    set_max_articles(val)
+    return HTMLResponse(
+        f'<div class="import-result import-result--ok">Saved — keeping up to {val} articles per feed.</div>'
+    )
 
 
 @app.get("/settings/export")
@@ -502,7 +529,7 @@ def refresh_all_feeds(
 ):
     feeds = db.query(Feed).order_by(Feed.title).all()
     for feed in feeds:
-        threading.Thread(target=fetch_feed, args=(feed.id,), daemon=True).start()
+        _import_executor.submit(fetch_feed, feed.id)
     return templates.TemplateResponse(
         "partials/feed_list.html",
         {"request": request, "feeds": feeds},

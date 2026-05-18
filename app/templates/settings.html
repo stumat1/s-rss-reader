@@ -104,6 +104,36 @@
 </section>
 
 <section class="settings-section">
+  <h2>Reading</h2>
+  <div class="settings-row">
+    <h3>Max Articles per Feed</h3>
+    <p>
+      Maximum number of articles to keep per feed. The oldest non-favourited
+      articles are pruned when this limit is exceeded.
+    </p>
+    <form
+      hx-post="/settings/max-articles"
+      hx-target="#max-articles-result"
+      hx-swap="innerHTML"
+    >
+      <div class="import-form-row">
+        <input
+          type="number"
+          name="max_articles_per_feed"
+          value="{{ max_articles }}"
+          min="1"
+          max="10000"
+          required
+          style="width:6rem;"
+        />
+        <button type="submit">Save</button>
+      </div>
+    </form>
+    <div id="max-articles-result"></div>
+  </div>
+</section>
+
+<section class="settings-section">
   <h2>Import / Export</h2>
 
   <div class="settings-row">

@@ -17,8 +17,18 @@ from app.models import Article, Feed
 
 log = logging.getLogger(__name__)
 
-MAX_ARTICLES = int(os.environ.get("MAX_ARTICLES_PER_FEED", 200))
+_max_articles = int(os.environ.get("MAX_ARTICLES_PER_FEED", 200))
+
+
+def get_max_articles() -> int:
+    return _max_articles
+
+
+def set_max_articles(n: int) -> None:
+    global _max_articles
+    _max_articles = max(1, n)
 DEFAULT_INTERVAL = int(os.environ.get("FETCH_INTERVAL_MIN", 30))
+FETCH_TIMEOUT = 30  # seconds; prevents indefinite hang on unresponsive feeds
 
 scheduler = BackgroundScheduler()
 
@@ -140,6 +150,26 @@ def _resolve_favicon(site_url: str | None) -> str | None:
     return fallback
 
 
+def _http_get(
+    url: str, etag: str | None, last_modified: str | None
+) -> tuple[bytes, str | None, str | None, int]:
+    """Fetch url with a timeout, sending conditional-GET headers if available.
+    Returns (body, new_etag, new_last_modified, http_status)."""
+    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 (compatible; rss-reader/1.0)"}
+    if etag:
+        headers["If-None-Match"] = etag
+    if last_modified:
+        headers["If-Modified-Since"] = last_modified
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
+        return (
+            resp.read(),
+            resp.headers.get("ETag"),
+            resp.headers.get("Last-Modified"),
+            resp.status,
+        )
+
+
 def fetch_feed(feed_id: int) -> None:
     db: Session = SessionLocal()
     try:
@@ -154,17 +184,23 @@ def fetch_feed(feed_id: int) -> None:
             db.commit()
             return
 
-        parsed = feedparser.parse(
-            feed.url,
-            etag=feed.etag,
-            modified=feed.last_modified,
-        )
+        try:
+            content, new_etag, new_last_modified, status = _http_get(
+                feed.url, feed.etag, feed.last_modified
+            )
+        except Exception as exc:
+            log.warning("Feed %d HTTP error: %s", feed_id, exc)
+            feed.error = f"Network error: {exc}"
+            db.commit()
+            return
 
-        if getattr(parsed, "status", None) == 304:
+        if status == 304:
             feed.last_fetched_at = datetime.now(timezone.utc)
             db.commit()
             log.debug("Feed %s: not modified (304)", feed.title or feed.url)
             return
+
+        parsed = feedparser.parse(content)
 
         if parsed.bozo and not parsed.entries:
             log.warning("Feed %d bozo error: %s", feed_id, parsed.bozo_exception)
@@ -178,10 +214,10 @@ def fetch_feed(feed_id: int) -> None:
 
         feed.error = None
         feed.last_fetched_at = datetime.now(timezone.utc)
-        if parsed.get("etag"):
-            feed.etag = parsed.etag
-        if parsed.get("modified"):
-            feed.last_modified = parsed.modified
+        if new_etag:
+            feed.etag = new_etag
+        if new_last_modified:
+            feed.last_modified = new_last_modified
 
         if not feed.title:
             feed.title = parsed.feed.get("title") or feed.url
@@ -237,8 +273,8 @@ def fetch_feed(feed_id: int) -> None:
             .filter_by(feed_id=feed_id, is_deleted=False, is_favourite=False)
             .count()
         )
-        if total > MAX_ARTICLES:
-            overflow = total - MAX_ARTICLES
+        if total > _max_articles:
+            overflow = total - _max_articles
             oldest = (
                 db.query(Article)
                 .filter_by(feed_id=feed_id, is_deleted=False, is_favourite=False)
