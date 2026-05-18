@@ -167,7 +167,7 @@
 </section>
 <script>
   document.querySelectorAll('input[name="theme"]').forEach(function(r){
-    if(r.value===(localStorage.getItem('theme')||'dark')) r.checked=true;
+    if(r.value===(localStorage.getItem('theme')||'light')) r.checked=true;
     r.addEventListener('change',function(){
       document.documentElement.setAttribute('data-theme',this.value);
       localStorage.setItem('theme',this.value);

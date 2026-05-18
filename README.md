@@ -10,7 +10,7 @@ A self-hosted, single-user RSS reader with a river-style feed. No auth, no build
 - **Mark all read** — for the current view
 - **Feed management** — add/delete feeds, set per-feed poll interval and category
 - **Manual refresh** — refresh one feed or all at once
-- **Themes** — Customize with multiple theme options
+- **Themes** — customize with multiple theme options
 - **OPML import/export** — migrate from/to any other RSS reader
 - **Background polling** — each feed fetched on its own schedule (default 30 min)
 - **Conditional GET** — uses `ETag`/`Last-Modified` to skip unchanged feeds
