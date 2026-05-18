@@ -16,6 +16,13 @@ A self-hosted, single-user RSS reader with a river-style feed. No auth, no build
 - **Conditional GET** — uses `ETag`/`Last-Modified` to skip unchanged feeds
 - **HTMX frontend** — all interactivity server-rendered, no hand-written JS
 
+<img width="820" height="586" alt="s-rss-reader-screenshot01" src="https://github.com/user-attachments/assets/5e2f84dc-3cc2-405c-bcf6-57c063e35b18" />
+
+<img width="815" height="584" alt="s-rss-reader-screenshot02" src="https://github.com/user-attachments/assets/79246834-ebef-47fe-9842-9ef800a8496d" />
+
+<img width="809" height="589" alt="s-rss-reader-screenshot03" src="https://github.com/user-attachments/assets/091333ca-92c8-4aed-8b94-02c3358c759f" />
+
+
 ## Stack
 
 | Layer       | Technology                                      |
