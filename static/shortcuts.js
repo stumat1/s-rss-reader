@@ -1,6 +1,26 @@
 (function () {
   'use strict';
 
+  function relativeTime(isoString) {
+    var diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diff < 60)           return 'just now';
+    if (diff < 3600)         return Math.floor(diff / 60) + ' min ago';
+    if (diff < 86400)        return Math.floor(diff / 3600) + ' hr ago';
+    if (diff < 86400 * 30)   return Math.floor(diff / 86400) + ' days ago';
+    if (diff < 86400 * 365)  return Math.floor(diff / (86400 * 30)) + ' mo ago';
+    return Math.floor(diff / (86400 * 365)) + ' yr ago';
+  }
+
+  function applyRelativeTimes() {
+    document.querySelectorAll('time[datetime]').forEach(function (el) {
+      var dt = el.getAttribute('datetime');
+      if (dt) el.textContent = relativeTime(dt);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', applyRelativeTimes);
+  document.addEventListener('htmx:afterSwap', applyRelativeTimes);
+
   var focusedId = null;
 
   function cards() {

@@ -406,6 +406,13 @@ button:hover,
   color: #fff;
 }
 
+.feed-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0 0.5rem;
+}
+
 .feed-table {
   width: 100%;
   border-collapse: collapse;
@@ -448,6 +455,72 @@ button:hover,
 .feed-actions {
   display: flex;
   gap: 6px;
+}
+.interval-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.interval-input {
+  width: 56px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--body-bg);
+  color: var(--text);
+  text-align: center;
+}
+.interval-unit {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.category-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.category-input {
+  width: 90px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--body-bg);
+  color: var(--text);
+}
+.category-add-input {
+  width: 160px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  outline: none;
+}
+.category-add-input::placeholder {
+  color: var(--text-muted);
+}
+.category-add-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 124, 255, 0.12);
+}
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sidebar-category-header {
+  list-style: none;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--sidebar-muted);
+  padding: 10px 8px 3px;
+  margin-top: 2px;
 }
 
 /* ── Badges ── */
@@ -497,6 +570,15 @@ button:hover,
 }
 .htmx-indicator {
   display: none;
+}
+.fetching-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+button:disabled,
+.btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Scrollbar – sidebar (dark) ── */

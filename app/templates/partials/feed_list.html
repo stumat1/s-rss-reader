@@ -10,6 +10,8 @@
         <th>Feed</th>
         <th>Last fetched</th>
         <th>Status</th>
+        <th>Category</th>
+        <th>Interval</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -37,13 +39,41 @@
           <span class="badge badge-ok">OK</span>
           {% endif %}
         </td>
+        <td>
+          <form class="category-form"
+                hx-patch="/feeds/{{ feed.id }}"
+                hx-target="#feed-list"
+                hx-swap="outerHTML">
+            <input type="text" name="category"
+                   value="{{ feed.category or '' }}"
+                   placeholder="none"
+                   class="category-input">
+            <button type="submit" class="btn-small">Set</button>
+          </form>
+        </td>
+        <td>
+          <form class="interval-form"
+                hx-patch="/feeds/{{ feed.id }}"
+                hx-target="#feed-list"
+                hx-swap="outerHTML">
+            <input type="number" name="fetch_interval_min"
+                   value="{{ feed.fetch_interval_min }}"
+                   min="1" max="1440"
+                   class="interval-input">
+            <span class="interval-unit">min</span>
+            <button type="submit" class="btn-small">Set</button>
+          </form>
+        </td>
         <td class="feed-actions">
           <button class="btn-small"
                   hx-post="/feeds/{{ feed.id }}/refresh"
                   hx-target="#feed-list"
-                  hx-swap="outerHTML">
+                  hx-swap="outerHTML"
+                  hx-indicator="#refresh-ind-{{ feed.id }}"
+                  hx-disabled-elt="this">
             Refresh
           </button>
+          <span id="refresh-ind-{{ feed.id }}" class="htmx-indicator fetching-text">Fetching…</span>
           <button class="btn-small btn-danger"
                   hx-delete="/feeds/{{ feed.id }}"
                   hx-target="#feed-list"

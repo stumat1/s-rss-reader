@@ -19,7 +19,10 @@ class Feed(Base):
     site_url: Mapped[str | None] = mapped_column(String)
     favicon_url: Mapped[str | None] = mapped_column(String)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    fetch_interval_min: Mapped[int] = mapped_column(Integer, default=30)
+    fetch_interval_min: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+    category: Mapped[str | None] = mapped_column(String, nullable=True)
+    etag: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String, nullable=True)
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow

@@ -35,9 +35,31 @@ sidebar %}
         {% if show_favourites %}class="active"{% endif %}
       >
         <span class="feed-nav-label">Favourites</span>
+        <span id="badge-favourites-total">{% if total_favourites %}<span class="sidebar-badge">{{ total_favourites }}</span>{% endif %}</span>
       </a>
     </li>
-    {% for feed in feeds %}
+    {% for cat, cat_feeds in feeds | selectattr("category") | list | groupby("category") %}
+    <li class="sidebar-category-header">{{ cat }}</li>
+    {% for feed in cat_feeds %}
+    <li>
+      <a
+        href="/?feed_id={{ feed.id }}"
+        hx-get="/articles?feed_id={{ feed.id }}"
+        hx-target="#articles"
+        hx-push-url="/?feed_id={{ feed.id }}"
+        {% if active_feed_id == feed.id %}class="active"{% endif %}
+      >
+        {% if feed.favicon_url %}
+        <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'" />
+        {% endif %}
+        <span class="feed-nav-label">{{ feed.title or feed.url }}</span>
+        {% set count = unread_counts.get(feed.id, 0) %}
+        <span id="badge-feed-{{ feed.id }}">{% if count %}<span class="sidebar-badge">{{ count }}</span>{% endif %}</span>
+      </a>
+    </li>
+    {% endfor %}
+    {% endfor %}
+    {% for feed in feeds if not feed.category %}
     <li>
       <a
         href="/?feed_id={{ feed.id }}"
@@ -56,7 +78,17 @@ sidebar %}
     </li>
     {% endfor %}
   </ul>
-  <a class="btn-small" href="/feeds">+ Add feed</a>
+  <div class="sidebar-actions">
+    <button hx-post="/feeds/refresh-all"
+            hx-swap="none"
+            hx-indicator="#refresh-all-ind"
+            hx-disabled-elt="this"
+            hx-on::after-request="window.location.reload()">
+      Refresh All
+    </button>
+    <span id="refresh-all-ind" class="htmx-indicator fetching-text">Fetching…</span>
+    <a class="btn-small" href="/feeds">+ Add feed</a>
+  </div>
 </aside>
 {% endblock %} {% block content %}
 <div id="articles">{% include "partials/article_list.html" %}</div>

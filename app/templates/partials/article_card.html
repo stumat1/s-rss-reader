@@ -6,7 +6,8 @@
     {% endif %}
     <span class="feed-name">{{ article.feed.title or article.feed.url }}</span>
     {% if article.published_at %}
-    <time datetime="{{ article.published_at.isoformat() }}">
+    <time datetime="{{ article.published_at.isoformat() }}"
+          title="{{ article.published_at.strftime('%b %d, %Y %H:%M UTC') }}">
       {{ article.published_at.strftime("%b %d, %Y") }}
     </time>
     {% endif %}

@@ -16,9 +16,26 @@ endblock %} {% block content %}
       placeholder="https://example.com/feed.xml"
       required
     />
+    <input
+      type="text"
+      name="category"
+      placeholder="Category (optional)"
+      class="category-add-input"
+    />
     <button type="submit">Add Feed</button>
   </form>
 
-  <div id="feed-list">{% include "partials/feed_list.html" %}</div>
+  <div class="feed-list-toolbar">
+    <button hx-post="/feeds/refresh-all"
+            hx-target="#feed-list"
+            hx-swap="outerHTML"
+            hx-indicator="#refresh-all-ind"
+            hx-disabled-elt="this">
+      Refresh All
+    </button>
+    <span id="refresh-all-ind" class="htmx-indicator fetching-text">Fetching…</span>
+  </div>
+
+  {% include "partials/feed_list.html" %}
 </div>
 {% endblock %}
