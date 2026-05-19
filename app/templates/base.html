@@ -30,5 +30,24 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+
+  <div id="shortcuts-help" class="shortcuts-help" hidden>
+    <div class="shortcuts-help-backdrop" data-shortcuts-close></div>
+    <div class="shortcuts-help-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-help-title">
+      <button class="shortcuts-help-close" data-shortcuts-close aria-label="Close">&times;</button>
+      <h2 id="shortcuts-help-title">Keyboard shortcuts</h2>
+      <dl class="shortcuts-help-list">
+        <dt>j&nbsp;/&nbsp;k</dt><dd>Next / previous article</dd>
+        <dt>g&nbsp;/&nbsp;G</dt><dd>Jump to top / bottom</dd>
+        <dt>o</dt><dd>Open original in a new tab</dd>
+        <dt>f</dt><dd>Toggle favourite</dd>
+        <dt>u</dt><dd>Toggle read / unread</dd>
+        <dt>x</dt><dd>Delete article</dd>
+        <dt>r</dt><dd>Refresh all feeds</dd>
+        <dt>Esc</dt><dd>Clear focus / close this dialog</dd>
+        <dt>?</dt><dd>Toggle this help</dd>
+      </dl>
+    </div>
+  </div>
 </body>
 </html>

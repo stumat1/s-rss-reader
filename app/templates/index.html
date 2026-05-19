@@ -1,6 +1,20 @@
 {% extends "base.html" %} {% block title %}S-RSS Reader{% endblock %} {% block
 sidebar %}
 <aside class="sidebar">
+  <div class="sidebar-search">
+    <input
+      type="search"
+      id="search-q"
+      name="q"
+      placeholder="Search articles…"
+      value="{{ search_q }}"
+      autocomplete="off"
+      hx-get="/articles"
+      hx-trigger="input changed delay:300ms, search"
+      hx-target="#articles"
+      hx-swap="innerHTML"
+    />
+  </div>
   <h3 class="sidebar-heading">Feeds</h3>
   <ul class="feed-nav">
     <li>
@@ -9,6 +23,7 @@ sidebar %}
         hx-get="/articles"
         hx-target="#articles"
         hx-push-url="/"
+        hx-include="#search-q"
         {% if not active_feed_id and not show_favourites and not show_unread %}class="active"{% endif %}
       >
         <span class="feed-nav-label">All articles</span>
@@ -20,6 +35,7 @@ sidebar %}
         hx-get="/articles?unread=1"
         hx-target="#articles"
         hx-push-url="/?unread=1"
+        hx-include="#search-q"
         {% if show_unread %}class="active"{% endif %}
       >
         <span class="feed-nav-label">Unread</span>
@@ -32,51 +48,66 @@ sidebar %}
         hx-get="/articles?favourites=1"
         hx-target="#articles"
         hx-push-url="/?favourites=1"
+        hx-include="#search-q"
         {% if show_favourites %}class="active"{% endif %}
       >
         <span class="feed-nav-label">Favourites</span>
         <span id="badge-favourites-total">{% if total_favourites %}<span class="sidebar-badge">{{ total_favourites }}</span>{% endif %}</span>
       </a>
     </li>
+    {% macro feed_link(feed) %}
+      <a
+        href="/?feed_id={{ feed.id }}"
+        hx-get="/articles?feed_id={{ feed.id }}"
+        hx-target="#articles"
+        hx-push-url="/?feed_id={{ feed.id }}"
+        hx-include="#search-q"
+        {% if active_feed_id == feed.id %}class="active"{% endif %}
+      >
+        {% if feed.category %}
+        <span class="cat-dot" style="background: {{ feed.category | category_color(category_colors.get(feed.category)) }}" title="{{ feed.category }}"></span>
+        {% endif %}
+        {% if feed.favicon_url %}
+        <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'" />
+        {% endif %}
+        <span class="feed-nav-label">{{ feed.title or feed.url }}</span>
+        {% set count = unread_counts.get(feed.id, 0) %}
+        <span id="badge-feed-{{ feed.id }}">{% if count %}<span class="sidebar-badge">{{ count }}</span>{% endif %}</span>
+      </a>
+    {% endmacro %}
     {% for cat, cat_feeds in feeds | selectattr("category") | list | groupby("category") %}
-    <li class="sidebar-category-header">{{ cat }}</li>
-    {% for feed in cat_feeds %}
-    <li>
-      <a
-        href="/?feed_id={{ feed.id }}"
-        hx-get="/articles?feed_id={{ feed.id }}"
-        hx-target="#articles"
-        hx-push-url="/?feed_id={{ feed.id }}"
-        {% if active_feed_id == feed.id %}class="active"{% endif %}
-      >
-        {% if feed.favicon_url %}
-        <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'" />
-        {% endif %}
-        <span class="feed-nav-label">{{ feed.title or feed.url }}</span>
-        {% set count = unread_counts.get(feed.id, 0) %}
-        <span id="badge-feed-{{ feed.id }}">{% if count %}<span class="sidebar-badge">{{ count }}</span>{% endif %}</span>
-      </a>
+    <li class="sidebar-category-li">
+      <details class="sidebar-category" data-cat="{{ cat }}" open>
+        <summary class="sidebar-category-header">
+          <span class="cat-dot" style="background: {{ cat | category_color(category_colors.get(cat)) }}"></span>
+          {{ cat }}
+        </summary>
+        <ul class="sidebar-category-feeds">
+          {% for feed in cat_feeds %}
+          <li>{{ feed_link(feed) }}</li>
+          {% endfor %}
+        </ul>
+      </details>
     </li>
     {% endfor %}
-    {% endfor %}
-    {% for feed in feeds if not feed.category %}
-    <li>
-      <a
-        href="/?feed_id={{ feed.id }}"
-        hx-get="/articles?feed_id={{ feed.id }}"
-        hx-target="#articles"
-        hx-push-url="/?feed_id={{ feed.id }}"
-        {% if active_feed_id == feed.id %}class="active"{% endif %}
-      >
-        {% if feed.favicon_url %}
-        <img class="favicon" src="{{ feed.favicon_url }}" alt="" onerror="this.style.display='none'" />
-        {% endif %}
-        <span class="feed-nav-label">{{ feed.title or feed.url }}</span>
-        {% set count = unread_counts.get(feed.id, 0) %}
-        <span id="badge-feed-{{ feed.id }}">{% if count %}<span class="sidebar-badge">{{ count }}</span>{% endif %}</span>
-      </a>
+    {% set categorized = feeds | selectattr("category") | list %}
+    {% set uncategorized = feeds | rejectattr("category") | list %}
+    {% if uncategorized and categorized %}
+    <li class="sidebar-category-li">
+      <details class="sidebar-category" data-cat="__none__" open>
+        <summary class="sidebar-category-header">Uncategorized</summary>
+        <ul class="sidebar-category-feeds">
+          {% for feed in uncategorized %}
+          <li>{{ feed_link(feed) }}</li>
+          {% endfor %}
+        </ul>
+      </details>
     </li>
-    {% endfor %}
+    {% elif uncategorized %}
+      {% for feed in uncategorized %}
+      <li>{{ feed_link(feed) }}</li>
+      {% endfor %}
+    {% endif %}
   </ul>
   <div class="sidebar-actions">
     <button hx-post="/feeds/refresh-all"

@@ -1,13 +1,16 @@
+import colorsys
+import hashlib
 import logging
 import os
-import threading
+import re
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
+from sqlalchemy.exc import IntegrityError, OperationalError
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,8 +18,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.database import Base, SessionLocal, engine, get_db
-from app.fetcher import fetch_feed, get_max_articles, schedule_feed, set_max_articles, start_scheduler, unschedule_feed, _assert_public_url
-from app.models import Article, Feed, Setting
+from app.fetcher import fetch_feed, get_max_articles, schedule_feed, scheduler, set_max_articles, start_scheduler, unschedule_feed, _assert_public_url
+from app.models import Article, Category, Feed, Setting
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -36,18 +39,26 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE feeds ADD COLUMN category TEXT",
             "ALTER TABLE feeds ADD COLUMN etag TEXT",
             "ALTER TABLE feeds ADD COLUMN last_modified TEXT",
+            "ALTER TABLE feeds ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE categories ADD COLUMN color TEXT",
+            "CREATE INDEX IF NOT EXISTS ix_articles_feed_deleted_published ON articles (feed_id, is_deleted, published_at)",
+            "CREATE INDEX IF NOT EXISTS ix_articles_deleted_read ON articles (is_deleted, is_read)",
+            "CREATE INDEX IF NOT EXISTS ix_articles_deleted_favourite ON articles (is_deleted, is_favourite)",
         ]:
             try:
                 conn.execute(text(stmt))
                 conn.commit()
-            except Exception:
-                pass  # column already exists
+            except OperationalError as exc:
+                # Most often: column/index already exists. Log so a real
+                # failure (disk full, permissions) is still visible at DEBUG.
+                log.debug("Skipping migration step %r: %s", stmt, exc)
     with SessionLocal() as db:
         s = db.get(Setting, "max_articles_per_feed")
         if s:
             set_max_articles(int(s.value))
     start_scheduler()
     yield
+    scheduler.shutdown(wait=False)
     _import_executor.shutdown(wait=False)
 
 
@@ -56,10 +67,38 @@ app.mount("/static", StaticFiles(directory=BASE_DIR.parent / "static"), name="st
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _hue_to_hex(hue: int) -> str:
+    # colorsys uses HLS (note the order): hue [0,1], lightness, saturation.
+    r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.55, 0.65)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+
+def category_color(name: str | None, override: str | None = None) -> str:
+    """Resolve a category color. Returns an explicit override if set, else a
+    deterministic hash-derived hex. Same name → same fallback color across reloads."""
+    if override and _HEX_COLOR_RE.match(override):
+        return override
+    if not name:
+        return "#999999"
+    hue = int(hashlib.sha256(name.encode("utf-8")).hexdigest(), 16) % 360
+    return _hue_to_hex(hue)
+
+
+templates.env.filters["category_color"] = category_color
+
+
 def require_htmx(request: Request) -> None:
     """Dependency: reject mutation requests that didn't come from HTMX (CSRF guard)."""
     if request.headers.get("HX-Request") != "true":
         raise HTTPException(status_code=403, detail="Direct form submission not allowed")
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -72,10 +111,11 @@ def index(
     feed_id: int | None = None,
     favourites: int = 0,
     unread: int = 0,
+    q: str | None = None,
     db: Session = Depends(get_db),
 ):
     feeds = db.query(Feed).order_by(Feed.title).all()
-    articles = _query_articles(db, feed_id=feed_id, favourites=bool(favourites), unread=bool(unread))
+    articles = _query_articles(db, feed_id=feed_id, favourites=bool(favourites), unread=bool(unread), q=q)
     unread_counts = dict(
         db.query(Article.feed_id, func.count(Article.id))
         .filter(Article.is_deleted == False, Article.is_read == False)  # noqa: E712
@@ -97,9 +137,11 @@ def index(
             "active_feed_id": feed_id,
             "show_favourites": bool(favourites),
             "show_unread": bool(unread),
+            "search_q": q or "",
             "unread_counts": unread_counts,
             "total_unread": total_unread,
             "total_favourites": total_favourites,
+            "category_colors": _category_colors(db),
             "page_size": PAGE_SIZE,
         },
     )
@@ -111,9 +153,10 @@ def articles_partial(
     feed_id: int | None = None,
     favourites: int = 0,
     unread: int = 0,
+    q: str | None = None,
     db: Session = Depends(get_db),
 ):
-    articles = _query_articles(db, feed_id=feed_id, favourites=bool(favourites), unread=bool(unread))
+    articles = _query_articles(db, feed_id=feed_id, favourites=bool(favourites), unread=bool(unread), q=q)
     return templates.TemplateResponse(
         "partials/article_list.html",
         {
@@ -122,6 +165,7 @@ def articles_partial(
             "active_feed_id": feed_id,
             "show_favourites": bool(favourites),
             "show_unread": bool(unread),
+            "search_q": q or "",
             "page_size": PAGE_SIZE,
         },
     )
@@ -133,6 +177,7 @@ def articles_more(
     feed_id: int | None = None,
     favourites: int = 0,
     unread: int = 0,
+    q: str | None = None,
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
@@ -141,6 +186,7 @@ def articles_more(
         feed_id=feed_id,
         favourites=bool(favourites),
         unread=bool(unread),
+        q=q,
         offset=offset,
     )
     return templates.TemplateResponse(
@@ -151,6 +197,7 @@ def articles_more(
             "active_feed_id": feed_id,
             "show_favourites": bool(favourites),
             "show_unread": bool(unread),
+            "search_q": q or "",
             "offset": offset,
             "page_size": PAGE_SIZE,
         },
@@ -162,23 +209,35 @@ def _query_articles(
     feed_id: int | None = None,
     favourites: bool = False,
     unread: bool = False,
+    q: str | None = None,
     offset: int = 0,
 ):
-    q = (
+    query = (
         db.query(Article)
         .join(Feed)
         .filter(Article.is_deleted == False)  # noqa: E712
     )
     if feed_id:
-        q = q.filter(Article.feed_id == feed_id)
+        query = query.filter(Article.feed_id == feed_id)
     if favourites:
-        q = q.filter(Article.is_favourite == True)  # noqa: E712
+        query = query.filter(Article.is_favourite == True)  # noqa: E712
     if unread:
-        q = q.filter(Article.is_read == False)  # noqa: E712
+        query = query.filter(Article.is_read == False)  # noqa: E712
+    if q and q.strip():
+        # Escape LIKE wildcards so a literal % or _ in user input doesn't match anything.
+        term = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{term}%"
+        query = query.filter(
+            or_(
+                Article.title.ilike(pattern, escape="\\"),
+                Article.summary.ilike(pattern, escape="\\"),
+            )
+        )
     return (
-        q.order_by(
+        query.order_by(
             Article.published_at.desc().nullslast(),
             Article.fetched_at.desc(),
+            Article.id.desc(),
         )
         .limit(PAGE_SIZE + 1)
         .offset(offset)
@@ -218,18 +277,28 @@ def mark_all_read(
     request: Request,
     feed_id: int | None = None,
     favourites: int = 0,
+    q: str | None = None,
     db: Session = Depends(get_db),
     _: None = Depends(require_htmx),
 ):
-    q = db.query(Article).filter(
+    query = db.query(Article).filter(
         Article.is_deleted == False,  # noqa: E712
         Article.is_read == False,  # noqa: E712
     )
     if feed_id:
-        q = q.filter(Article.feed_id == feed_id)
+        query = query.filter(Article.feed_id == feed_id)
     if favourites:
-        q = q.filter(Article.is_favourite == True)  # noqa: E712
-    q.update({"is_read": True}, synchronize_session=False)
+        query = query.filter(Article.is_favourite == True)  # noqa: E712
+    if q and q.strip():
+        term = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{term}%"
+        query = query.filter(
+            or_(
+                Article.title.ilike(pattern, escape="\\"),
+                Article.summary.ilike(pattern, escape="\\"),
+            )
+        )
+    query.update({"is_read": True}, synchronize_session=False)
     db.commit()
     return Response(status_code=200, headers={"HX-Refresh": "true"})
 
@@ -269,6 +338,23 @@ def toggle_read(
             "feed_unread": feed_unread,
         },
     )
+
+
+@app.delete("/articles")
+def delete_all_articles(
+    feed_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    feed = db.get(Feed, feed_id)
+    if feed is None:
+        return Response(status_code=404)
+    db.query(Article).filter(
+        Article.feed_id == feed_id,
+        Article.is_deleted == False,  # noqa: E712
+    ).update({"is_deleted": True}, synchronize_session=False)
+    db.commit()
+    return Response(status_code=200, headers={"HX-Refresh": "true"})
 
 
 @app.delete("/articles/{article_id}")
@@ -409,12 +495,22 @@ def import_opml(
     imported = 0
     skipped = 0
     for url, category in feeds_to_import:
+        try:
+            _assert_public_url(url)
+        except ValueError:
+            skipped += 1
+            continue
         if db.query(Feed).filter_by(url=url).first():
             skipped += 1
             continue
         feed = Feed(url=url, category=category)
         db.add(feed)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            skipped += 1
+            continue
         db.refresh(feed)
         _import_executor.submit(fetch_feed, feed.id)
         schedule_feed(feed)
@@ -430,13 +526,40 @@ def import_opml(
 # Feed management page
 # ---------------------------------------------------------------------------
 
+def _categories_with_counts(db: Session) -> list[tuple[str, int, str | None]]:
+    """Return (name, feed_count, explicit_color) for every category."""
+    from collections import Counter
+    feed_cats = [
+        c for (c,) in db.query(Feed.category)
+        .filter(Feed.category.isnot(None), Feed.category != "")
+        .all()
+    ]
+    registered = {c.name: c.color for c in db.query(Category).all()}
+    all_names = sorted(set(feed_cats) | set(registered.keys()))
+    counts = Counter(feed_cats)
+    return [(n, counts.get(n, 0), registered.get(n)) for n in all_names]
+
+
+def _category_colors(db: Session) -> dict[str, str]:
+    """Map of category name → explicit hex color for those with one set."""
+    return {
+        c.name: c.color
+        for c in db.query(Category).filter(Category.color.isnot(None)).all()
+    }
+
+
+def _feed_list_context(request: Request, db: Session, error: str | None = None) -> dict:
+    return {
+        "request": request,
+        "feeds": db.query(Feed).order_by(Feed.title).all(),
+        "categories_with_counts": _categories_with_counts(db),
+        "category_colors": _category_colors(db),
+        "error": error,
+    }
+
 @app.get("/feeds", response_class=HTMLResponse)
 def feeds_page(request: Request, db: Session = Depends(get_db)):
-    feeds = db.query(Feed).order_by(Feed.title).all()
-    return templates.TemplateResponse(
-        "feeds.html",
-        {"request": request, "feeds": feeds},
-    )
+    return templates.TemplateResponse("feeds.html", _feed_list_context(request, db))
 
 
 @app.post("/feeds", response_class=HTMLResponse)
@@ -461,18 +584,22 @@ def add_feed(
             error = "Feed already exists."
 
     if not error:
-        feed = Feed(url=url, category=category.strip() or None if category else None)
+        clean_category = (category or "").strip() or None
+        feed = Feed(url=url, category=clean_category)
         db.add(feed)
-        db.commit()
-        db.refresh(feed)
-        # Fetch immediately in a thread so the user sees articles fast
-        threading.Thread(target=fetch_feed, args=(feed.id,), daemon=True).start()
-        schedule_feed(feed)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            error = "Feed already exists."
+        else:
+            db.refresh(feed)
+            # Fetch immediately in a worker so the user sees articles fast
+            _import_executor.submit(fetch_feed, feed.id)
+            schedule_feed(feed)
 
-    feeds = db.query(Feed).order_by(Feed.title).all()
     return templates.TemplateResponse(
-        "partials/feed_list.html",
-        {"request": request, "feeds": feeds, "error": error},
+        "partials/feed_list.html", _feed_list_context(request, db, error=error)
     )
 
 
@@ -488,10 +615,8 @@ def delete_feed(
         unschedule_feed(feed_id)
         db.delete(feed)
         db.commit()
-    feeds = db.query(Feed).order_by(Feed.title).all()
     return templates.TemplateResponse(
-        "partials/feed_list.html",
-        {"request": request, "feeds": feeds},
+        "partials/feed_list.html", _feed_list_context(request, db)
     )
 
 
@@ -514,10 +639,99 @@ def update_feed(
     db.commit()
     if fetch_interval_min is not None:
         schedule_feed(feed)
-    feeds = db.query(Feed).order_by(Feed.title).all()
     return templates.TemplateResponse(
-        "partials/feed_list.html",
-        {"request": request, "feeds": feeds},
+        "partials/feed_list.html", _feed_list_context(request, db)
+    )
+
+
+@app.post("/categories", response_class=HTMLResponse)
+def create_category(
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    cleaned = name.strip()
+    if cleaned and db.get(Category, cleaned) is None:
+        db.add(Category(name=cleaned))
+        db.commit()
+    return templates.TemplateResponse(
+        "partials/feed_list.html", _feed_list_context(request, db)
+    )
+
+
+@app.post("/categories/color", response_class=HTMLResponse)
+def set_category_color(
+    request: Request,
+    name: str = Form(...),
+    color: str = Form(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    cleaned = name.strip()
+    if cleaned and _HEX_COLOR_RE.match(color):
+        entry = db.get(Category, cleaned)
+        if entry is None:
+            entry = Category(name=cleaned, color=color)
+            db.add(entry)
+        else:
+            entry.color = color
+        db.commit()
+    return templates.TemplateResponse(
+        "partials/feed_list.html", _feed_list_context(request, db)
+    )
+
+
+@app.delete("/categories/{name}", response_class=HTMLResponse)
+def delete_category(
+    name: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    in_use = db.query(Feed).filter(Feed.category == name).count()
+    if in_use:
+        return templates.TemplateResponse(
+            "partials/feed_list.html",
+            _feed_list_context(request, db, error=f"Cannot delete '{name}': {in_use} feed(s) still use it."),
+        )
+    entry = db.get(Category, name)
+    if entry:
+        db.delete(entry)
+        db.commit()
+    return templates.TemplateResponse(
+        "partials/feed_list.html", _feed_list_context(request, db)
+    )
+
+
+@app.post("/categories/rename", response_class=HTMLResponse)
+def rename_category(
+    request: Request,
+    old: str = Form(...),
+    new: str = Form(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_htmx),
+):
+    old = old.strip()
+    new_clean = new.strip() or None
+    if old and new_clean != old:
+        db.query(Feed).filter(Feed.category == old).update(
+            {"category": new_clean}, synchronize_session=False
+        )
+        # Keep the registry in sync: carry forward the color when renaming.
+        old_entry = db.get(Category, old)
+        old_color = old_entry.color if old_entry else None
+        if old_entry:
+            db.delete(old_entry)
+        if new_clean:
+            new_entry = db.get(Category, new_clean)
+            if new_entry is None:
+                db.add(Category(name=new_clean, color=old_color))
+            elif old_color and not new_entry.color:
+                new_entry.color = old_color
+        db.commit()
+    return templates.TemplateResponse(
+        "partials/feed_list.html", _feed_list_context(request, db)
     )
 
 
@@ -531,8 +745,7 @@ def refresh_all_feeds(
     for feed in feeds:
         _import_executor.submit(fetch_feed, feed.id)
     return templates.TemplateResponse(
-        "partials/feed_list.html",
-        {"request": request, "feeds": feeds},
+        "partials/feed_list.html", _feed_list_context(request, db)
     )
 
 
@@ -543,9 +756,7 @@ def refresh_feed(
     db: Session = Depends(get_db),
     _: None = Depends(require_htmx),
 ):
-    threading.Thread(target=fetch_feed, args=(feed_id,), daemon=True).start()
-    feeds = db.query(Feed).order_by(Feed.title).all()
+    _import_executor.submit(fetch_feed, feed_id)
     return templates.TemplateResponse(
-        "partials/feed_list.html",
-        {"request": request, "feeds": feeds},
+        "partials/feed_list.html", _feed_list_context(request, db)
     )

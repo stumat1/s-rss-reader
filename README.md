@@ -28,7 +28,7 @@ A self-hosted, single-user RSS reader with a river-style feed. No auth, no build
 | Layer       | Technology                                      |
 | ----------- | ----------------------------------------------- |
 | Backend     | Python 3.12, FastAPI, SQLAlchemy (sync), SQLite |
-| Frontend    | HTMX + Jinja2 templates, plain CSS (dark theme) |
+| Frontend    | HTMX + Jinja2 templates, plain CSS (light/dark themes) |
 | RSS parsing | feedparser                                      |
 | Scheduling  | APScheduler BackgroundScheduler                 |
 | Container   | Docker + docker-compose                         |
@@ -54,6 +54,13 @@ DB_PATH=./data/rss.db uvicorn app.main:app --reload
 ```
 
 Open [http://localhost:8000](http://localhost:8000).
+
+**Running tests:**
+
+```bash
+pip install pytest
+pytest tests/
+```
 
 ## Configuration
 

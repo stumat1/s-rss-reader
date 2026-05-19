@@ -1,21 +1,61 @@
+{% set ctx_qs %}{% if active_feed_id %}feed_id={{ active_feed_id }}{% elif show_favourites %}favourites=1{% endif %}{% endset %}
+{% set ctx_sep = "&" if ctx_qs else "" %}
 {% if articles %}
-  {% if articles | selectattr("is_read", "equalto", false) | list %}
+  {% set has_unread = articles | selectattr("is_read", "equalto", false) | list %}
   <div class="list-toolbar">
+    {% if show_unread %}
+    <a class="btn-small btn-toggle active"
+       href="/{% if ctx_qs %}?{{ ctx_qs }}{% endif %}"
+       hx-get="/articles{% if ctx_qs %}?{{ ctx_qs }}{% endif %}"
+       hx-target="#articles"
+       hx-swap="innerHTML"
+       hx-push-url="/{% if ctx_qs %}?{{ ctx_qs }}{% endif %}"
+       hx-include="#search-q"
+       title="Click to show all articles">
+      ✓ Unread only
+    </a>
+    {% else %}
+    <a class="btn-small btn-toggle"
+       href="/?unread=1{{ ctx_sep }}{{ ctx_qs }}"
+       hx-get="/articles?unread=1{{ ctx_sep }}{{ ctx_qs }}"
+       hx-target="#articles"
+       hx-swap="innerHTML"
+       hx-push-url="/?unread=1{{ ctx_sep }}{{ ctx_qs }}"
+       hx-include="#search-q"
+       title="Hide articles you've already read">
+      Unread only
+    </a>
+    {% endif %}
+    {% if has_unread %}
+    {% set read_all_params = [] %}
+    {% if active_feed_id %}{% set _ = read_all_params.append('feed_id=' ~ active_feed_id) %}{% endif %}
+    {% if show_favourites %}{% set _ = read_all_params.append('favourites=1') %}{% endif %}
+    {% if search_q %}{% set _ = read_all_params.append('q=' ~ (search_q | urlencode)) %}{% endif %}
     <button
       class="btn-small"
-      hx-patch="/articles/read-all{% if active_feed_id %}?feed_id={{ active_feed_id }}{% elif show_unread %}?unread=1{% elif show_favourites %}?favourites=1{% endif %}"
+      hx-patch="/articles/read-all{% if read_all_params %}?{{ read_all_params | join('&') }}{% endif %}"
       hx-disabled-elt="this"
     >
       Mark all as read
     </button>
+    {% endif %}
+    {% if active_feed_id %}
+    <button
+      class="btn-small btn-danger"
+      hx-delete="/articles?feed_id={{ active_feed_id }}"
+      hx-confirm="Delete all articles from this feed? Favourited articles will also be removed."
+      hx-disabled-elt="this"
+    >
+      Delete All
+    </button>
+    {% endif %}
   </div>
-  {% endif %}
   {% for article in articles[:page_size] %}
     {% include "partials/article_card.html" %}
   {% endfor %}
   {% if articles | length > page_size %}
   <div class="load-more-sentinel"
-       hx-get="/articles/more?offset={{ page_size }}{% if active_feed_id %}&feed_id={{ active_feed_id }}{% endif %}{% if show_unread %}&unread=1{% endif %}{% if show_favourites %}&favourites=1{% endif %}"
+       hx-get="/articles/more?offset={{ page_size }}{% if active_feed_id %}&feed_id={{ active_feed_id }}{% endif %}{% if show_unread %}&unread=1{% endif %}{% if show_favourites %}&favourites=1{% endif %}{% if search_q %}&q={{ search_q | urlencode }}{% endif %}"
        hx-trigger="revealed"
        hx-target="this"
        hx-swap="outerHTML">
@@ -24,7 +64,20 @@
   {% endif %}
 {% else %}
 <div class="empty-state">
+  {% if show_unread %}
+  <p>All caught up — no unread articles{% if active_feed_id %} in this feed{% elif show_favourites %} in your favourites{% endif %}.</p>
+  <a href="/{% if ctx_qs %}?{{ ctx_qs }}{% endif %}"
+     hx-get="/articles{% if ctx_qs %}?{{ ctx_qs }}{% endif %}"
+     hx-target="#articles"
+     hx-swap="innerHTML"
+     hx-push-url="/{% if ctx_qs %}?{{ ctx_qs }}{% endif %}">
+    Show all articles
+  </a>
+  {% elif search_q %}
+  <p>No articles match “{{ search_q }}”.</p>
+  {% else %}
   <p>No articles yet.</p>
   <a href="/feeds">Add a feed</a> to get started.
+  {% endif %}
 </div>
 {% endif %}

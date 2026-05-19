@@ -3,6 +3,67 @@
   <p class="error-msg">{{ error }}</p>
   {% endif %}
 
+  <datalist id="categories-list">
+    {% for cat, _count, _color in categories_with_counts %}
+    <option value="{{ cat }}"></option>
+    {% endfor %}
+  </datalist>
+
+  <section class="categories-manager">
+    <h3>Categories</h3>
+    <p class="categories-help">
+      Create a category here, then assign feeds to it from the table below.
+      Rename to update every feed in it (empty value un-categorises). Empty categories can be deleted.
+    </p>
+    <form class="category-create-form"
+          hx-post="/categories"
+          hx-target="#feed-list"
+          hx-swap="outerHTML"
+          hx-on::after-request="this.reset()">
+      <input type="text" name="name" placeholder="New category name" required class="category-input">
+      <button type="submit" class="btn-small">+ Add category</button>
+    </form>
+    {% if categories_with_counts %}
+    <ul class="categories-list">
+      {% for cat, count, stored_color in categories_with_counts %}
+      {% set resolved = cat | category_color(stored_color) %}
+      <li>
+        <form class="category-color-form">
+          <input type="hidden" name="name" value="{{ cat }}">
+          <input type="color" name="color" value="{{ resolved }}"
+                 class="cat-color-picker"
+                 title="Color for {{ cat }}"
+                 hx-trigger="change"
+                 hx-post="/categories/color"
+                 hx-include="closest form"
+                 hx-target="#feed-list"
+                 hx-swap="outerHTML">
+        </form>
+        <form class="category-rename-form"
+              hx-post="/categories/rename"
+              hx-target="#feed-list"
+              hx-swap="outerHTML">
+          <input type="hidden" name="old" value="{{ cat }}">
+          <input type="text" name="new" value="{{ cat }}" class="category-input"
+                 list="categories-list" aria-label="New name for {{ cat }}">
+          <small class="category-count">{{ count }} feed{% if count != 1 %}s{% endif %}</small>
+          <button type="submit" class="btn-small">Rename</button>
+        </form>
+        {% if count == 0 %}
+        <button class="btn-small btn-danger"
+                hx-delete="/categories/{{ cat | urlencode }}"
+                hx-target="#feed-list"
+                hx-swap="outerHTML"
+                hx-confirm="Delete empty category '{{ cat }}'?"
+                title="Delete empty category">✕</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+
   {% if feeds %}
   <table class="feed-table">
     <thead>
@@ -24,19 +85,31 @@
           {% endif %}
           <span>{{ feed.title or feed.url }}</span>
           <small class="feed-url">{{ feed.url }}</small>
+          {% if feed.error %}
+          <small class="feed-error-msg">{{ feed.error }}</small>
+          {% endif %}
         </td>
         <td>
           {% if feed.last_fetched_at %}
-          {{ feed.last_fetched_at.strftime("%b %d %H:%M") }}
+          <time datetime="{{ feed.last_fetched_at.isoformat() }}"
+                title="{{ feed.last_fetched_at.strftime('%b %d, %Y %H:%M UTC') }}">
+            {{ feed.last_fetched_at.strftime("%b %d %H:%M") }}
+          </time>
           {% else %}
           —
           {% endif %}
         </td>
         <td>
-          {% if feed.error %}
-          <span class="badge badge-error" title="{{ feed.error }}">Error</span>
-          {% else %}
+          {% if not feed.error %}
           <span class="badge badge-ok">OK</span>
+          {% elif feed.consecutive_failures >= 3 %}
+          <span class="badge badge-error" title="{{ feed.error }}">Failing</span>
+          <small class="feed-fail-count">{{ feed.consecutive_failures }}× in a row</small>
+          {% else %}
+          <span class="badge badge-warn" title="{{ feed.error }}">Warning</span>
+          {% if feed.consecutive_failures > 1 %}
+          <small class="feed-fail-count">{{ feed.consecutive_failures }}× in a row</small>
+          {% endif %}
           {% endif %}
         </td>
         <td>
@@ -47,7 +120,8 @@
             <input type="text" name="category"
                    value="{{ feed.category or '' }}"
                    placeholder="none"
-                   class="category-input">
+                   class="category-input"
+                   list="categories-list">
             <button type="submit" class="btn-small">Set</button>
           </form>
         </td>

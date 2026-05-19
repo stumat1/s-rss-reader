@@ -21,6 +21,22 @@
   document.addEventListener('DOMContentLoaded', applyRelativeTimes);
   document.addEventListener('htmx:afterSwap', applyRelativeTimes);
 
+  function applyCategoryState() {
+    document.querySelectorAll('details.sidebar-category[data-cat]').forEach(function (d) {
+      var key = 'cat-open:' + d.getAttribute('data-cat');
+      var stored = localStorage.getItem(key);
+      if (stored === 'false') d.removeAttribute('open');
+      else if (stored === 'true') d.setAttribute('open', '');
+      if (d.dataset.persistBound) return;
+      d.dataset.persistBound = '1';
+      d.addEventListener('toggle', function () {
+        localStorage.setItem(key, d.hasAttribute('open') ? 'true' : 'false');
+      });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', applyCategoryState);
+  document.addEventListener('htmx:afterSwap', applyCategoryState);
+
   var focusedId = null;
 
   function cards() {
@@ -54,9 +70,37 @@
     if (card) setFocus(card);
   }, true);
 
+  var helpEl = null;
+  function help() {
+    if (!helpEl) helpEl = document.getElementById('shortcuts-help');
+    return helpEl;
+  }
+  function helpOpen() {
+    var h = help();
+    return !!(h && !h.hasAttribute('hidden'));
+  }
+  function toggleHelp(force) {
+    var h = help();
+    if (!h) return;
+    var open = typeof force === 'boolean' ? force : h.hasAttribute('hidden');
+    if (open) h.removeAttribute('hidden'); else h.setAttribute('hidden', '');
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('[data-shortcuts-close]')) toggleHelp(false);
+  });
+
   document.addEventListener('keydown', function (e) {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key === 'Escape') {
+      if (helpOpen()) { e.preventDefault(); toggleHelp(false); return; }
+      if (focusedId) { e.preventDefault(); setFocus(null); return; }
+      return;
+    }
+
+    if (helpOpen()) return;
 
     var el = current();
 
@@ -70,6 +114,20 @@
         e.preventDefault();
         move(-1);
         break;
+
+      case 'g': {
+        e.preventDefault();
+        var all = cards();
+        if (all.length) setFocus(all[0]);
+        break;
+      }
+
+      case 'G': {
+        e.preventDefault();
+        var all2 = cards();
+        if (all2.length) setFocus(all2[all2.length - 1]);
+        break;
+      }
 
       case 'o': {
         if (!el) return;
@@ -93,6 +151,26 @@
         if (readBtn) readBtn.click();
         break;
       }
+
+      case 'x': {
+        if (!el) return;
+        e.preventDefault();
+        var delBtn = el.querySelector('[hx-delete^="/articles/"]');
+        if (delBtn) delBtn.click();
+        break;
+      }
+
+      case 'r': {
+        e.preventDefault();
+        var refreshBtn = document.querySelector('[hx-post="/feeds/refresh-all"]');
+        if (refreshBtn) refreshBtn.click();
+        break;
+      }
+
+      case '?':
+        e.preventDefault();
+        toggleHelp();
+        break;
     }
   });
 

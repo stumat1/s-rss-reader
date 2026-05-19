@@ -3,7 +3,7 @@
 {% endfor %}
 {% if articles | length > page_size %}
 <div class="load-more-sentinel"
-     hx-get="/articles/more?offset={{ offset + page_size }}{% if active_feed_id %}&feed_id={{ active_feed_id }}{% endif %}{% if show_unread %}&unread=1{% endif %}{% if show_favourites %}&favourites=1{% endif %}"
+     hx-get="/articles/more?offset={{ offset + page_size }}{% if active_feed_id %}&feed_id={{ active_feed_id }}{% endif %}{% if show_unread %}&unread=1{% endif %}{% if show_favourites %}&favourites=1{% endif %}{% if search_q %}&q={{ search_q | urlencode }}{% endif %}"
      hx-trigger="revealed"
      hx-target="this"
      hx-swap="outerHTML">

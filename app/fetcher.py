@@ -29,6 +29,8 @@ def set_max_articles(n: int) -> None:
     _max_articles = max(1, n)
 DEFAULT_INTERVAL = int(os.environ.get("FETCH_INTERVAL_MIN", 30))
 FETCH_TIMEOUT = 30  # seconds; prevents indefinite hang on unresponsive feeds
+MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB cap on feed body
+MAX_FAVICON_PAGE_BYTES = 32 * 1024  # only need <head>; favicon resolution
 
 scheduler = BackgroundScheduler()
 
@@ -68,16 +70,34 @@ def _assert_public_url(url: str) -> None:
             return  # unresolvable; let feedparser / urllib surface the error naturally
         for *_, sockaddr in infos:
             try:
-                addr = ipaddress.ip_address(sockaddr[0])
-                if not addr.is_global:
-                    raise ValueError(f"Disallowed address for {host!r}: {addr}")
-            except ValueError as exc:
-                if "Disallowed" in str(exc):
-                    raise
+                resolved = ipaddress.ip_address(sockaddr[0])
+            except ValueError:
+                continue  # not an IP literal we can validate (e.g. AF_UNIX); skip
+            if not resolved.is_global:
+                raise ValueError(f"Disallowed address for {host!r}: {resolved}")
         return
     if not addr.is_global:
         raise ValueError(f"Disallowed address: {addr}")
 
+
+class _SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-runs the public-address check on every redirect target so a public
+    feed URL can't 302 us onto a LAN service."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _assert_public_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_SSRFSafeRedirectHandler())
+
+
+def _read_capped(resp, max_bytes: int) -> bytes:
+    """Read up to max_bytes; raise ValueError if the response is larger."""
+    data = resp.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError(f"Response exceeds {max_bytes} byte cap")
+    return data
 
 
 def _parse_dt(entry) -> datetime | None:
@@ -85,7 +105,6 @@ def _parse_dt(entry) -> datetime | None:
         val = getattr(entry, field, None)
         if val:
             try:
-                import time
                 return datetime(*val[:6], tzinfo=timezone.utc)
             except Exception:
                 pass
@@ -132,11 +151,11 @@ def _resolve_favicon(site_url: str | None) -> str | None:
             site_url,
             headers={"User-Agent": "Mozilla/5.0 (compatible; rss-reader/1.0)"},
         )
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with _opener.open(req, timeout=8) as resp:
             content_type = resp.headers.get("Content-Type", "")
             if "html" not in content_type:
                 return fallback
-            html = resp.read(32768).decode("utf-8", errors="replace")
+            html = resp.read(MAX_FAVICON_PAGE_BYTES).decode("utf-8", errors="replace")
         parser = _IconParser()
         parser.feed(html)
         if parser.icons:
@@ -161,9 +180,9 @@ def _http_get(
     if last_modified:
         headers["If-Modified-Since"] = last_modified
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
+    with _opener.open(req, timeout=FETCH_TIMEOUT) as resp:
         return (
-            resp.read(),
+            _read_capped(resp, MAX_FEED_BYTES),
             resp.headers.get("ETag"),
             resp.headers.get("Last-Modified"),
             resp.status,
@@ -181,6 +200,7 @@ def fetch_feed(feed_id: int) -> None:
             _assert_public_url(feed.url)
         except ValueError as exc:
             feed.error = str(exc)
+            feed.consecutive_failures = (feed.consecutive_failures or 0) + 1
             db.commit()
             return
 
@@ -191,11 +211,14 @@ def fetch_feed(feed_id: int) -> None:
         except Exception as exc:
             log.warning("Feed %d HTTP error: %s", feed_id, exc)
             feed.error = f"Network error: {exc}"
+            feed.consecutive_failures = (feed.consecutive_failures or 0) + 1
             db.commit()
             return
 
         if status == 304:
             feed.last_fetched_at = datetime.now(timezone.utc)
+            feed.consecutive_failures = 0
+            feed.error = None
             db.commit()
             log.debug("Feed %s: not modified (304)", feed.title or feed.url)
             return
@@ -205,6 +228,7 @@ def fetch_feed(feed_id: int) -> None:
         if parsed.bozo and not parsed.entries:
             log.warning("Feed %d bozo error: %s", feed_id, parsed.bozo_exception)
             feed.error = "Could not parse feed"
+            feed.consecutive_failures = (feed.consecutive_failures or 0) + 1
             db.commit()
             return
 
@@ -213,6 +237,7 @@ def fetch_feed(feed_id: int) -> None:
                         feed_id, len(parsed.entries), parsed.bozo_exception)
 
         feed.error = None
+        feed.consecutive_failures = 0
         feed.last_fetched_at = datetime.now(timezone.utc)
         if new_etag:
             feed.etag = new_etag
@@ -248,9 +273,14 @@ def fetch_feed(feed_id: int) -> None:
                 .first()
             )
             if existing:
-                if existing.title != new_title or existing.summary != summary:
+                changed = False
+                if new_title and existing.title != new_title:
                     existing.title = new_title
+                    changed = True
+                if existing.summary != summary:
                     existing.summary = summary
+                    changed = True
+                if changed:
                     update_count += 1
                 continue
 
@@ -300,6 +330,7 @@ def fetch_feed(feed_id: int) -> None:
             feed = db.get(Feed, feed_id)
             if feed:
                 feed.error = "Fetch failed — check server logs"
+                feed.consecutive_failures = (feed.consecutive_failures or 0) + 1
                 db.commit()
         except Exception:
             pass
