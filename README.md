@@ -16,7 +16,7 @@ A self-hosted, single-user RSS reader with a river-style feed. No auth, no build
 - **Conditional GET** — uses `ETag`/`Last-Modified` to skip unchanged feeds
 - **HTMX frontend** — all interactivity server-rendered, no hand-written JS
 
----
+--
 
 <img width="821" height="587" alt="Screenshot 2026-05-19 152500" src="https://github.com/user-attachments/assets/75b2ec12-c0e2-4077-8dfc-00fc4dc4ddad" />
 
@@ -24,19 +24,7 @@ A self-hosted, single-user RSS reader with a river-style feed. No auth, no build
 
 <img width="817" height="584" alt="Screenshot 2026-05-19 152527" src="https://github.com/user-attachments/assets/16dd6298-e234-40f7-88c2-4eef914fd727" />
 
-
----
-
-
-## Stack
-
-| Layer       | Technology                                      |
-| ----------- | ----------------------------------------------- |
-| Backend     | Python 3.12, FastAPI, SQLAlchemy (sync), SQLite |
-| Frontend    | HTMX + Jinja2 templates, plain CSS (light/dark themes) |
-| RSS parsing | feedparser                                      |
-| Scheduling  | APScheduler BackgroundScheduler                 |
-| Container   | Docker + docker-compose                         |
+--
 
 ## Quick start
 
@@ -60,13 +48,6 @@ DB_PATH=./data/rss.db uvicorn app.main:app --reload
 
 Open [http://localhost:8000](http://localhost:8000).
 
-**Running tests:**
-
-```bash
-pip install pytest
-pytest tests/
-```
-
 ## Configuration
 
 Copy `.env.example` to `.env` and edit as needed, or set environment variables directly.
@@ -76,26 +57,6 @@ Copy `.env.example` to `.env` and edit as needed, or set environment variables d
 | `DB_PATH`               | `/data/rss.db` | Path to the SQLite database file                                      |
 | `FETCH_INTERVAL_MIN`    | `30`           | Default poll interval for new feeds (minutes)                         |
 | `MAX_ARTICLES_PER_FEED` | `200`          | Max articles kept per feed; oldest non-favourited articles are pruned |
-
-## Project layout
-
-```
-app/
-  main.py          — all FastAPI routes
-  database.py      — SQLite engine + get_db dependency
-  models.py        — Feed, Article ORM models
-  fetcher.py       — fetch_feed(), scheduling, URL validation
-  templates/
-    base.html
-    index.html         — article river + sidebar
-    feeds.html         — feed management
-    settings.html      — OPML import/export
-    partials/          — HTMX partial responses
-static/style.css
-Dockerfile
-docker-compose.yml
-requirements.txt
-```
 
 ## OPML
 

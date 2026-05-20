@@ -11,56 +11,78 @@
 
   <section class="categories-manager">
     <h3>Categories</h3>
-    <p class="categories-help">
-      Create a category here, then assign feeds to it from the table below.
-      Rename to update every feed in it (empty value un-categorises). Empty categories can be deleted.
-    </p>
-    <form class="category-create-form"
-          hx-post="/categories"
-          hx-target="#feed-list"
-          hx-swap="outerHTML"
-          hx-on::after-request="this.reset()">
-      <input type="text" name="name" placeholder="New category name" required class="category-input">
-      <button type="submit" class="btn-small">+ Add category</button>
-    </form>
-    {% if categories_with_counts %}
-    <ul class="categories-list">
+    <ul class="category-chips">
       {% for cat, count, stored_color in categories_with_counts %}
       {% set resolved = cat | category_color(stored_color) %}
       <li>
-        <form class="category-color-form">
-          <input type="hidden" name="name" value="{{ cat }}">
-          <input type="color" name="color" value="{{ resolved }}"
-                 class="cat-color-picker"
-                 title="Color for {{ cat }}"
-                 hx-trigger="change"
-                 hx-post="/categories/color"
-                 hx-include="closest form"
-                 hx-target="#feed-list"
-                 hx-swap="outerHTML">
-        </form>
-        <form class="category-rename-form"
-              hx-post="/categories/rename"
-              hx-target="#feed-list"
-              hx-swap="outerHTML">
-          <input type="hidden" name="old" value="{{ cat }}">
-          <input type="text" name="new" value="{{ cat }}" class="category-input"
-                 list="categories-list" aria-label="New name for {{ cat }}">
-          <small class="category-count">{{ count }} feed{% if count != 1 %}s{% endif %}</small>
-          <button type="submit" class="btn-small">Rename</button>
-        </form>
-        {% if count == 0 %}
-        <button class="btn-small btn-danger"
-                hx-delete="/categories/{{ cat | urlencode }}"
-                hx-target="#feed-list"
-                hx-swap="outerHTML"
-                hx-confirm="Delete empty category '{{ cat }}'?"
-                title="Delete empty category">✕</button>
-        {% endif %}
+        <details class="category-chip">
+          <summary>
+            <span class="cat-dot" style="background: {{ resolved }}"></span>
+            <span class="category-chip-label">{{ cat }}</span>
+            <span class="category-chip-count">{{ count }}</span>
+          </summary>
+          <div class="category-chip-panel">
+            <form class="category-chip-row"
+                  hx-post="/categories/rename"
+                  hx-target="#feed-list"
+                  hx-swap="outerHTML">
+              <label>Name</label>
+              <input type="hidden" name="old" value="{{ cat }}">
+              <input type="text" name="new" value="{{ cat }}" class="category-input"
+                     list="categories-list" aria-label="New name for {{ cat }}">
+              <button type="submit" class="btn-small">Save</button>
+            </form>
+            <form class="category-chip-row">
+              <label>Color</label>
+              <input type="hidden" name="name" value="{{ cat }}">
+              <input type="color" name="color" value="{{ resolved }}"
+                     class="cat-color-picker"
+                     title="Color for {{ cat }}"
+                     hx-trigger="change"
+                     hx-post="/categories/color"
+                     hx-include="closest form"
+                     hx-target="#feed-list"
+                     hx-swap="outerHTML">
+              <span class="category-chip-hint">{{ resolved }}</span>
+            </form>
+            <div class="category-chip-row">
+              <label>Delete</label>
+              {% if count == 0 %}
+              <button class="btn-small btn-danger"
+                      hx-delete="/categories/{{ cat | urlencode }}"
+                      hx-target="#feed-list"
+                      hx-swap="outerHTML"
+                      hx-confirm="Delete empty category '{{ cat }}'?">
+                Delete category
+              </button>
+              {% else %}
+              <button class="btn-small btn-danger" disabled
+                      title="{{ count }} feed{% if count != 1 %}s{% endif %} still use{% if count == 1 %}s{% endif %} this — empty it first">
+                Delete category
+              </button>
+              <span class="category-chip-hint">{{ count }} feed{% if count != 1 %}s{% endif %}</span>
+              {% endif %}
+            </div>
+          </div>
+        </details>
       </li>
       {% endfor %}
+      <li>
+        <details class="category-chip category-chip-add">
+          <summary>+ Add</summary>
+          <div class="category-chip-panel">
+            <form class="category-chip-row"
+                  hx-post="/categories"
+                  hx-target="#feed-list"
+                  hx-swap="outerHTML">
+              <input type="text" name="name" placeholder="Category name"
+                     required class="category-input">
+              <button type="submit" class="btn-small">Create</button>
+            </form>
+          </div>
+        </details>
+      </li>
     </ul>
-    {% endif %}
   </section>
 
 
@@ -116,13 +138,14 @@
           <form class="category-form"
                 hx-patch="/feeds/{{ feed.id }}"
                 hx-target="#feed-list"
-                hx-swap="outerHTML">
-            <input type="text" name="category"
-                   value="{{ feed.category or '' }}"
-                   placeholder="none"
-                   class="category-input"
-                   list="categories-list">
-            <button type="submit" class="btn-small">Set</button>
+                hx-swap="outerHTML"
+                hx-trigger="change">
+            <select name="category" class="category-select" aria-label="Category for {{ feed.title or feed.url }}">
+              <option value="" {% if not feed.category %}selected{% endif %}>(none)</option>
+              {% for cat, _count, _color in categories_with_counts %}
+              <option value="{{ cat }}" {% if cat == feed.category %}selected{% endif %}>{{ cat }}</option>
+              {% endfor %}
+            </select>
           </form>
         </td>
         <td>
