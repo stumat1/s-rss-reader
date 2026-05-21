@@ -15,7 +15,10 @@
 </head>
 <body>
   <nav class="navbar">
-    <a class="brand" href="/">S-RSS Reader</a>
+    <a class="brand" href="/">
+      <img class="brand-logo" src="/static/apple-touch-icon.png" alt="" width="22" height="22">
+      S-RSS Reader
+    </a>
     <div class="nav-links">
       <a href="/" {% if request.url.path == "/" and not request.query_params.get("favourites") %}class="active"{% endif %}>All</a>
       <a href="/?favourites=1" {% if request.query_params.get("favourites") %}class="active"{% endif %}>Favourites</a>
