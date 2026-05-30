@@ -2,6 +2,7 @@ import ipaddress
 import logging
 import os
 import socket
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -180,13 +181,21 @@ def _http_get(
     if last_modified:
         headers["If-Modified-Since"] = last_modified
     req = urllib.request.Request(url, headers=headers)
-    with _opener.open(req, timeout=FETCH_TIMEOUT) as resp:
-        return (
-            _read_capped(resp, MAX_FEED_BYTES),
-            resp.headers.get("ETag"),
-            resp.headers.get("Last-Modified"),
-            resp.status,
-        )
+    try:
+        with _opener.open(req, timeout=FETCH_TIMEOUT) as resp:
+            return (
+                _read_capped(resp, MAX_FEED_BYTES),
+                resp.headers.get("ETag"),
+                resp.headers.get("Last-Modified"),
+                resp.status,
+            )
+    except urllib.error.HTTPError as exc:
+        # urllib raises for every non-2xx status, including 304 Not Modified —
+        # the expected reply to a conditional GET. Surface 304 as a normal
+        # response so the caller's not-modified fast path can run.
+        if exc.code == 304:
+            return b"", exc.headers.get("ETag"), exc.headers.get("Last-Modified"), 304
+        raise
 
 
 def fetch_feed(feed_id: int) -> None:
@@ -399,9 +408,14 @@ def _sweep_stale_feeds() -> None:
         feeds = db.query(Feed).all()
         now = datetime.now(timezone.utc)
         for feed in feeds:
-            if feed.last_fetched_at is None or (
-                now - feed.last_fetched_at
-            ) > timedelta(minutes=feed.fetch_interval_min or DEFAULT_INTERVAL):
+            last = feed.last_fetched_at
+            # SQLite drops tzinfo on DateTime columns, so values come back
+            # naive; treat them as the UTC they were stored in.
+            if last is not None and last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if last is None or (now - last) > timedelta(
+                minutes=feed.fetch_interval_min or DEFAULT_INTERVAL
+            ):
                 if not scheduler.get_job(_job_id(feed.id)):
                     fetch_feed(feed.id)
     finally:

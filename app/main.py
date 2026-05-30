@@ -5,6 +5,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -88,6 +89,20 @@ def category_color(name: str | None, override: str | None = None) -> str:
 
 
 templates.env.filters["category_color"] = category_color
+
+
+def utc_iso(dt: datetime | None) -> str:
+    """ISO-8601 string with an explicit UTC offset. SQLite hands datetimes
+    back naive, so without this the client's `new Date()` would read the
+    offset-less string as local time and skew every relative timestamp."""
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+templates.env.filters["utc_iso"] = utc_iso
 
 
 def require_htmx(request: Request) -> None:

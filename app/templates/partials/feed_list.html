@@ -113,7 +113,7 @@
         </td>
         <td>
           {% if feed.last_fetched_at %}
-          <time datetime="{{ feed.last_fetched_at.isoformat() }}"
+          <time datetime="{{ feed.last_fetched_at | utc_iso }}"
                 title="{{ feed.last_fetched_at.strftime('%b %d, %Y %H:%M UTC') }}">
             {{ feed.last_fetched_at.strftime("%b %d %H:%M") }}
           </time>
